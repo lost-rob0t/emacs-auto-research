@@ -1,0 +1,9 @@
+#+title: emacs-auto-research
+
+Generic Emacs control plane for browsing, creating, repairing, and deciding research documents across multiple projects.
+
+The reusable package lives here; project repositories contain research data and lightweight configuration only.
+
+* Status
+
+Initial package extraction from the author's dotfiles is in progress.
