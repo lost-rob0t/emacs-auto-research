@@ -21,43 +21,64 @@ The generic destination is this repository.
 | dashboard UI | =lisp/auto-research-dashboard.el= |
 | approval parsing/repair | =lisp/auto-research-metadata.el= |
 | approval commands | =lisp/auto-research-approval.el= |
+| GitHub discovery/delivery | =lisp/auto-research-github.el= |
 | project roots | =lisp/auto-research-project.el= |
 | Evil/Doom compatibility | =lisp/auto-research-doom.el= |
 | public entrypoint | =lisp/auto-research.el= |
 | external workflow integration | =lisp/auto-research-plugin.el= |
 
-* No premature deletion
+* Remote parity ported
 
-The old dashboard includes remote GitHub scanning and approval-PR delivery that
-is not yet fully ported to the generic adapter architecture.
+The remaining reusable behavior from the old dashboard now has a package home.
+The optional GitHub adapter ports:
 
-Therefore the old dotfile implementation must *not* be deleted merely because
-the local control plane now exists.
+- authenticated-user + visible-organization repository discovery;
+- current default-branch recursive tree scans;
+- bounded asynchronous tree/blob fetches;
+- canonical pending research discovery plus opt-in legacy reviewable research;
+- read-only remote research viewing;
+- approval metadata repair through the shared canonical metadata layer;
+- branch-head and blob/content race checks before a decision is written;
+- a second head/blob/content check immediately before delivery;
+- approval-only branches and pull requests;
+- =[skip ci]= approval commits;
+- expected-head guarded immediate merge, defaulting to rebase.
 
-Migration is complete only when:
+GitHub remains optional.  The core package does not require =gh= and the remote
+source is registered through the generic asynchronous dashboard-provider API.
+This also keeps =M-x auto-research= as the one dashboard instead of adding a
+second GitHub-only UI.
 
-1. the reusable package loads from the dotfiles;
-2. local dashboard/approval behavior is verified;
-3. remote discovery/delivery parity is implemented as an optional adapter;
-4. project configuration is moved into the user's tangled =config.org=;
-5. GLM/gptel personal configuration is in =config.org= rather than package
-   source;
-6. the old files can be removed or reduced to compatibility aliases without
-   losing behavior.
+* Dotfile deletion gate
+
+The old dotfile implementation no longer contains unique reusable GitHub
+behavior after this adapter lands.  It can be removed once the user's dotfiles:
+
+1. install/load =emacs-auto-research=;
+2. configure local =auto-research-projects=;
+3. require =auto-research-github= and call =auto-research-github-enable= when
+   remote discovery is wanted;
+4. preserve any personal model/provider configuration in tangled =config.org=;
+5. verify =M-x auto-research= locally with an authenticated =gh= session.
+
+After that migration there must not be two authoritative approval parsers or two
+dashboard implementations.
 
 * Desired final dotfile shape
 
-The dotfiles should eventually contain only package installation and personal
-configuration, roughly:
+The dotfiles should contain package installation plus personal configuration,
+roughly:
 
 #+begin_src emacs-lisp
 (use-package! auto-research
   :config
   (setq auto-research-projects ...))
+
+(use-package! auto-research-github
+  :after auto-research
+  :config
+  (auto-research-github-enable))
 #+end_src
 
-The exact Doom/straight declaration should be written in the authoritative
-=config.org= and tangled normally.
-
-There must not be two authoritative approval parsers or two dashboard
-implementations after migration.
+The exact Doom/straight, =package.el=, or Nix installation declaration belongs
+in the authoritative dotfile configuration and should be tangled normally.
