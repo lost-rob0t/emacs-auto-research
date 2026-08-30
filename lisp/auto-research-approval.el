@@ -27,6 +27,24 @@
     buffer-file-name)
    (t (user-error "Point is not on a research item and this is not an Org research file"))))
 
+(defun auto-research-approval--target-project (file)
+  "Return configured project associated with FILE, if any."
+  (or (and auto-research-document-project
+           (auto-research-project-by-id auto-research-document-project))
+      (auto-research-project-at-directory (file-name-directory file))))
+
+(defun auto-research-document-context ()
+  "Return plugin context for the currently open research document."
+  (let ((file (auto-research-approval--target-file)))
+    (list :source 'document
+          :file file
+          :project (auto-research-approval--target-project file))))
+
+(defun auto-research-run-plugin-action ()
+  "Run an integration action for the current research document."
+  (interactive)
+  (auto-research-plugin-run-action (auto-research-document-context)))
+
 (defun auto-research-approval--git-value (file &rest args)
   "Run Git ARGS for FILE and return trimmed stdout, or \"NONE\" on failure."
   (let ((default-directory (file-name-directory file)))
@@ -65,9 +83,7 @@
 (defun auto-research-decide (state)
   "Record research decision STATE in the current dashboard/file context."
   (let* ((file (auto-research-approval--target-file))
-         (project (or (and auto-research-document-project
-                           (auto-research-project-by-id auto-research-document-project))
-                      (auto-research-project-at-directory (file-name-directory file))))
+         (project (auto-research-approval--target-project file))
          (actor (read-string "Decision maker: " auto-research-default-approval-actor))
          (evidence (read-string "Approval evidence: " auto-research-default-approval-evidence)))
     (auto-research-approval--write-decision file state actor evidence)
@@ -113,6 +129,7 @@ written."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-a") #'auto-research-approve)
     (define-key map (kbd "C-c C-r") #'auto-research-reject)
+    (define-key map (kbd "C-c C-x") #'auto-research-run-plugin-action)
     map)
   "Keymap for `auto-research-document-mode'.")
 
