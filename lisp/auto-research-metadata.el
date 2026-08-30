@@ -78,17 +78,20 @@ Equivalent duplicates collapse.  Conflicting duplicates signal."
           auto-research-metadata--approval-fields))
 
 (defun auto-research-metadata--remove-approval-keywords (content)
-  "Remove canonical/legacy approval keyword lines from CONTENT."
+  "Remove every canonical/legacy approval keyword line from CONTENT."
   (with-temp-buffer
     (insert content)
     (goto-char (point-min))
     (let ((case-fold-search t)
           (regexp
            (concat "^#\\+"
-                   (regexp-opt auto-research-metadata--approval-fields t)
-                   ":[ \\t]*.*\\(?:\\n\\|\\'\\)")))
-      (while (re-search-forward regexp nil t)
-        (replace-match "" t t)))
+                   (regexp-opt auto-research-metadata--approval-fields)
+                   ":[ \\t]*")))
+      (while (not (eobp))
+        (if (looking-at regexp)
+            (delete-region (line-beginning-position)
+                           (min (point-max) (1+ (line-end-position))))
+          (forward-line 1))))
     (buffer-string)))
 
 (defun auto-research-metadata--canonical-block (state actor evidence base-commit base-blob decided-at)
