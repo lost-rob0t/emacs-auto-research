@@ -1,0 +1,63 @@
+#+title: Migration from dotfiles
+
+* Source implementation
+
+The package is being extracted from the user's Doom dotfiles.  The known source
+files are:
+
+- =research-dashboard.el= — cross-repository dashboard and remote GitHub review
+  behavior;
+- =research-dashboard-evil.el= — Evil bindings;
+- =research-approval.el= — strict canonical approval validation and local Git
+  approval workflow;
+- =starintel-research.el= — StarIntel-named lazy entrypoint.
+
+The generic destination is this repository.
+
+* Ownership mapping
+
+| Old dotfile code | New canonical home |
+|------------------+--------------------|
+| dashboard UI | =lisp/auto-research-dashboard.el= |
+| approval parsing/repair | =lisp/auto-research-metadata.el= |
+| approval commands | =lisp/auto-research-approval.el= |
+| project roots | =lisp/auto-research-project.el= |
+| Evil/Doom compatibility | =lisp/auto-research-doom.el= |
+| public entrypoint | =lisp/auto-research.el= |
+| external workflow integration | =lisp/auto-research-plugin.el= |
+
+* No premature deletion
+
+The old dashboard includes remote GitHub scanning and approval-PR delivery that
+is not yet fully ported to the generic adapter architecture.
+
+Therefore the old dotfile implementation must *not* be deleted merely because
+the local control plane now exists.
+
+Migration is complete only when:
+
+1. the reusable package loads from the dotfiles;
+2. local dashboard/approval behavior is verified;
+3. remote discovery/delivery parity is implemented as an optional adapter;
+4. project configuration is moved into the user's tangled =config.org=;
+5. GLM/gptel personal configuration is in =config.org= rather than package
+   source;
+6. the old files can be removed or reduced to compatibility aliases without
+   losing behavior.
+
+* Desired final dotfile shape
+
+The dotfiles should eventually contain only package installation and personal
+configuration, roughly:
+
+#+begin_src emacs-lisp
+(use-package! auto-research
+  :config
+  (setq auto-research-projects ...))
+#+end_src
+
+The exact Doom/straight declaration should be written in the authoritative
+=config.org= and tangled normally.
+
+There must not be two authoritative approval parsers or two dashboard
+implementations after migration.

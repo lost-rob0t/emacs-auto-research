@@ -1,0 +1,203 @@
+#+title: ARADR integration model
+
+* Purpose
+
+=emacs-auto-research= is a standalone Emacs package for durable research
+artifacts and human review.  It can support ARADR, but it is not itself the
+ARADR worker, scheduler, or implementation engine.
+
+The package deliberately stays separate from Consortium.  Consortium may use
+=emacs-auto-research= through the plugin API, just like any other workflow
+engine, but the core package never requires Consortium.
+
+* ARADR
+
+This project treats ARADR operationally as:
+
+#+begin_src text
+Analyze -> Research -> Analyze/refine -> Design -> Review
+#+end_src
+
+The important bit is the second analysis/refinement pass.  Evidence gathered in
+research must be allowed to change the problem model before a design is treated
+as authoritative.
+
+** Analyze
+
+Start from a bounded problem, issue, question, or seed.
+
+Capture:
+
+- what is being asked;
+- current assumptions;
+- known constraints;
+- unknowns;
+- required evidence;
+- plausible alternatives;
+- falsifiers that would invalidate the current direction.
+
+** Research
+
+Collect evidence and make it durable.
+
+Depending on the project this can include source inspection, documentation,
+experiments, web research, issue history, comparison against existing systems,
+and prior project artifacts.
+
+Research should be written to real files.  Chat transcripts, hidden model
+memory, or task metadata are not substitutes for the canonical artifact.
+
+** Analyze / refine
+
+Reconcile what the research changed.
+
+This pass should:
+
+- update assumptions;
+- resolve or expose contradictions;
+- reject weak hypotheses;
+- enumerate evidence gaps;
+- tighten requirements;
+- decide whether the problem is understood well enough to design.
+
+If not, loop back into research.
+
+** Design
+
+Produce a concrete design derived from the durable evidence and refined problem
+model.
+
+The design can be architecture, protocol, API, UX, data model, migration plan,
+or another project-appropriate artifact.
+
+** Review
+
+Challenge the design before treating it as settled.
+
+Review should look for unsupported assumptions, missing evidence, architectural
+failure modes, implementation ambiguity, security/effect risk, and tests that
+cannot actually prove the design.
+
+Review can route the work back to research, analysis, or design.
+
+* Human authority
+
+A workflow can define human gates at whichever transitions matter.  The Emacs
+control plane makes those gates cheap to operate while keeping the persisted
+state strict.
+
+From the dashboard:
+
+#+begin_src text
+a    approve
+R    reject
+#+end_src
+
+From an open research Org file:
+
+#+begin_src text
+C-c C-a    approve
+C-c C-r    reject
+#+end_src
+
+Known legacy/noncanonical approval metadata is deterministically repaired,
+validated, and only then is the human decision written.  Contradictory metadata
+fails closed.
+
+* Durable artifact model
+
+#+begin_src text
+seed / issue / question
+        |
+        v
+analysis/research files <----------+
+        |                           |
+        v                           |
+refined problem model              |
+        |                           |
+        v                           |
+design artifact                    |
+        |                           |
+        v                           |
+review -----------------------------+
+        |
+        v
+explicit human gate
+        |
+        v
+external implementation workflow
+#+end_src
+
+=emacs-auto-research= owns the artifact browser, project roots, creation UX,
+metadata normalization, and human decision surface in that diagram.
+
+It does not decide which model runs ARADR or which implementation engine runs
+afterward.
+
+* Separation from Consortium
+
+Consortium is one possible workflow engine above this layer.
+
+The intended dependency direction is:
+
+#+begin_src text
+Consortium integration package
+          |
+          v
+ auto-research-plugin API
+          |
+          v
+  emacs-auto-research
+#+end_src
+
+The core package contains no Consortium phase table, provider, scheduler, or
+state machine.
+
+A Consortium adapter may contribute project roots and observe a human decision,
+then translate that decision into a legal Consortium state transition according
+to Consortium's own rules.
+
+The same plugin API can be used by Prolog-RLM, Agent Zero, a shell worker, or a
+completely unrelated research system.
+
+* What emacs-auto-research owns
+
+- durable Org research discovery;
+- project/control-plane roots;
+- all-project and project-scoped views;
+- unified browsing/search UI;
+- creation of research artifacts;
+- canonical approval metadata;
+- deterministic metadata migration;
+- explicit approve/reject actions;
+- approval directly from an open research document;
+- plugin hooks for external workflow systems.
+
+* What it does not own
+
+- which LLM performs a phase;
+- agent scheduling;
+- Prolog or Consortium workflow authority;
+- RAGE or another implementation executor;
+- project-specific legal lifecycle transitions;
+- GitHub issue policy;
+- StarIntel-specific phase names;
+- personal gptel credentials/model configuration.
+
+* Plugin boundary
+
+A workflow adapter should be able to ask or react to things like:
+
+#+begin_src text
+What research projects exist?
+What artifacts exist for project P?
+Open artifact X.
+Create a new research artifact seeded from Z.
+What is the canonical approval state?
+The human just APPROVED artifact X.
+#+end_src
+
+It should not need to know how the dashboard renders or where approval keywords
+are physically located in the Org file.
+
+See [[file:PLUGINS.org][PLUGINS.org]].

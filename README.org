@@ -1,9 +1,596 @@
 #+title: emacs-auto-research
+#+author: lost-rob0t
 
-Generic Emacs control plane for browsing, creating, repairing, and deciding research documents across multiple projects.
+* emacs-auto-research
 
-The reusable package lives here; project repositories contain research data and lightweight configuration only.
+=emacs-auto-research= is a standalone Emacs control plane for durable research.
+It unifies research discovery, project scoping, creation, review, metadata repair,
+and explicit human approval into one UI/UX.
 
-* Status
+It is intentionally *not tied to StarIntel or Consortium*.
 
-Initial package extraction from the author's dotfiles is in progress.
+StarIntel, Prolog-RLM, Consortium, org-vector, a standalone investigation repo,
+or an unrelated software project can all integrate with it without changing the
+core package.
+
+The main command is:
+
+#+begin_src text
+M-x auto-research
+#+end_src
+
+That opens the single research control plane.  There is no separate dashboard,
+separate approval product, or special Consortium-only UI.
+
+* Goals
+
+- One research UI.
+- One approval UX.
+- All configured projects visible by default.
+- Easy project scoping when needed.
+- Open a research document and approve it directly.
+- Deterministically repair old approval metadata instead of forcing manual Org
+  surgery.
+- Work in normal Emacs without assuming Evil.
+- Work naturally in Doom/Evil when Evil is present.
+- Stay generic enough to be used as a plugin/frontend for larger workflow
+  engines.
+- Keep project data durable in Org files rather than hidden in agent chat state.
+
+* Origin
+
+The first implementation lived in Doom dotfiles as several separate files:
+
+- =research-dashboard.el=
+- =research-dashboard-evil.el=
+- =research-approval.el=
+- =starintel-research.el=
+
+The old dashboard already had useful review UX and remote-repository ideas, but
+it mixed reusable machinery with personal config and StarIntel naming.  It also
+had a sharp failure path where a human approval could stop with:
+
+#+begin_example
+Research decision failed: Partial/noncanonical approval metadata exists
+#+end_example
+
+This repository is the extraction/refactor target.  Reusable behavior belongs
+here.  Dotfiles should eventually contain only package installation and user
+configuration.
+
+* Unified UX
+
+** Open the control plane
+
+#+begin_src text
+M-x auto-research
+#+end_src
+
+The dashboard starts in:
+
+#+begin_example
+ALL PROJECTS
+#+end_example
+
+and displays:
+
+- approval state;
+- project;
+- lifecycle/status;
+- title;
+- repository-relative path.
+
+Dashboard keys:
+
+| Key | Action |
+|-----+--------|
+| RET | Open research |
+| a | Approve |
+| R | Reject |
+| n | New research |
+| p | Select one project |
+| A | Return to all projects |
+| / | Search |
+| g | Refresh |
+
+** Open research and approve it directly
+
+Research review is not restricted to the dashboard.
+
+When an Org file is inside the research root of a configured project,
+=auto-research-document-mode= is enabled automatically when that Org file is
+opened.
+
+From the document itself:
+
+#+begin_src text
+C-c C-a    approve
+C-c C-r    reject
+#+end_src
+
+The same =auto-research-approve= function is used from both the dashboard and an
+open document.
+
+The intended flow is simply:
+
+#+begin_src text
+open research
+     |
+     v
+read it
+     |
+     v
+C-c C-a
+     |
+     v
+repair metadata if safely possible
+     |
+     v
+validate
+     |
+     v
+APPROVED
+#+end_src
+
+No bouncing back to a second approval screen is required.
+
+* Projects and control-plane directories
+
+Projects are generic configuration records.
+
+#+begin_src emacs-lisp
+(setq auto-research-projects
+      '((:id prolog-rlm
+         :name "Prolog RLM"
+         :root "~/Documents/Projects/prolog-rlm"
+         :research-root "research")
+        (:id starintel-research
+         :name "StarIntel Research"
+         :root "~/starintel/starintel-auto-research"
+         :research-root "roam/research")))
+#+end_src
+
+=:research-root= may be relative to the repository root or absolute.
+
+Plain =M-x auto-research= shows all projects.
+
+Use:
+
+- =p= to scope the current dashboard to one project;
+- =A= to return to all projects;
+- =M-x auto-research-current-project= to open directly on the configured
+  research project associated with the current =project.el= project.
+
+Project identity is part of research identity.  Two repositories may both
+contain =RESEARCH-001.org= without colliding.
+
+* New research
+
+Press =n= from the dashboard or run:
+
+#+begin_src text
+M-x auto-research-new
+#+end_src
+
+When the dashboard is scoped to one project, that project is used as the
+creation destination.  When the dashboard shows all projects, Emacs asks which
+project owns the new research.
+
+The initial document includes:
+
+- title;
+- =DRAFT= lifecycle;
+- canonical pending approval metadata;
+- research question;
+- findings section;
+- sources section;
+- decision notes.
+
+The filename policy is customizable through
+=auto-research-new-file-name-function=.
+
+A later slice adds full project bootstrap/template creation through
+=auto-research-init-project=.
+
+* Approval metadata
+
+** Canonical representation
+
+The core package owns one canonical approval block:
+
+#+begin_src org
+#+approval_schema: auto-research.approval.v1
+#+approval_state: PENDING
+#+approval_actor: NONE
+#+approval_evidence: NONE
+#+approval_base_commit: NONE
+#+approval_base_blob: NONE
+#+approval_decided_at: NONE
+#+end_src
+
+It is written immediately after the unique =#+status:= keyword.
+
+Allowed states are:
+
+- =PENDING=
+- =APPROVED=
+- =REJECTED=
+
+** Repair before approval
+
+Strict approval means the final artifact is canonical.  It does *not* mean a
+human should manually repair every old file before being allowed to approve it.
+
+The decision pipeline is:
+
+#+begin_src text
+read document
+    |
+    v
+parse approval metadata
+    |
+    +-- already canonical ----------+
+    |                               |
+    +-- safely repairable -> repair |
+                                    v
+                                validate
+                                    |
+                                    v
+                          write human decision
+#+end_src
+
+The initial deterministic migrator understands:
+
+- partial approval blocks;
+- =prolog-rlm.research-approval.v1=;
+- =adard.research-approval.v1=;
+- missing fields that can safely become =NONE=;
+- equivalent duplicate values;
+- canonical fields in an old/noncanonical block position.
+
+Repair is idempotent.
+
+Conflicting duplicate values are *not guessed*.  A file claiming both
+=PENDING= and =APPROVED= fails closed and requires inspection.
+
+** Provenance
+
+For local Git research files the package attempts to record:
+
+- current =HEAD= in =approval_base_commit=;
+- the current tracked file blob in =approval_base_blob=.
+
+When those values cannot be proven they remain =NONE=.
+
+The approval metadata is the durable human decision record.  A workflow plugin
+may observe it, but cannot silently reinterpret it inside the core package.
+
+* Vanilla Emacs and Doom/Evil
+
+The package is designed for normal Emacs first.
+
+Evil is not a dependency, is not required, and is not assumed to be enabled.
+All important commands are ordinary Emacs commands with normal keymaps.
+
+When Evil is present, =auto-research-doom.el= is loaded as an optional
+compatibility layer.  It mirrors the dashboard/document actions into Evil
+motion/normal states so Doom users do not have to fight the mode.
+
+This is additive compatibility, not an Evil-first architecture.
+
+* Standalone package and plugin architecture
+
+=emacs-auto-research= is standalone.
+
+It does not require:
+
+- Consortium;
+- StarIntel;
+- Prolog-RLM;
+- RAGE;
+- GitHub;
+- gptel;
+- any autonomous agent runtime.
+
+At the same time it exposes an integration API in:
+
+#+begin_example
+lisp/auto-research-plugin.el
+#+end_example
+
+External systems can register a plugin that contributes projects and observes
+human decisions.
+
+Example:
+
+#+begin_src emacs-lisp
+(require 'auto-research-plugin)
+
+(auto-research-register-plugin
+ (auto-research-plugin-create
+  :id 'my-workflow
+  :project-provider
+  (lambda ()
+    '((:id my-project
+       :name "My Project"
+       :root "~/src/my-project"
+       :research-root "research")))
+  :after-decision
+  (lambda (file state project)
+    (message "Saw %s for %s" state file))))
+#+end_src
+
+Plugin-contributed projects appear in the same unified dashboard as statically
+configured projects.
+
+Duplicate project IDs are rejected instead of ambiguously merging state.
+
+See [[file:docs/PLUGINS.org][docs/PLUGINS.org]].
+
+** Consortium is an integration, not the core
+
+Consortium can use this package as an Emacs frontend/plugin by registering from
+Consortium's own package/repository.
+
+Conceptually:
+
+#+begin_src emacs-lisp
+(auto-research-register-plugin
+ (auto-research-plugin-create
+  :id 'consortium
+  :project-provider #'consortium-auto-research-projects
+  :after-decision #'consortium-auto-research-after-decision))
+#+end_src
+
+That adapter can translate a durable human research decision into a legal
+Consortium control-plane event according to *Consortium's* state machine.
+
+The dependency direction must remain:
+
+#+begin_src text
+emacs-auto-research
+        ^
+        |
+  optional adapter
+        |
+   Consortium
+#+end_src
+
+Never:
+
+#+begin_src text
+emacs-auto-research -> requires Consortium
+#+end_src
+
+This keeps the package useful even on a machine where Consortium does not
+exist.
+
+* ARADR
+
+** What ARADR means here
+
+For this package, ARADR is treated as the durable evidence-first loop:
+
+#+begin_src text
+Analyze
+   |
+   v
+Research
+   |
+   v
+Analyze / refine
+   |
+   v
+Design
+   |
+   v
+Review
+#+end_src
+
+The second analysis pass matters.  Research is not just collected and dumped
+into a design.  New evidence should update assumptions, constraints, unknowns,
+and the problem model before design is allowed to harden.
+
+In practice:
+
+1. *Analyze* the seed/problem.
+   Define the question, scope, constraints, existing knowledge, unknowns, and
+   what evidence would falsify current assumptions.
+
+2. *Research*.
+   Gather evidence, inspect source/code/docs, compare alternatives, and write
+   durable findings with provenance.
+
+3. *Analyze again*.
+   Reconcile conflicting evidence, update the problem model, enumerate missing
+   information, reject weak hypotheses, and decide whether the research is
+   mature enough for design.
+
+4. *Design*.
+   Produce a concrete design derived from the research rather than from hidden
+   model context.
+
+5. *Review*.
+   Challenge the design, identify unsupported assumptions/failure modes, and
+   route defects back to research/analysis/design when needed.
+
+A human gate can then approve the relevant artifact/transition according to the
+project's governance policy.
+
+** Durable-artifact rule
+
+ARADR works best when each phase leaves inspectable files rather than relying on
+chat history.
+
+The control-plane view is therefore:
+
+#+begin_src text
+issue / prompt / seed
+        |
+        v
+research Org artifacts <----------+
+        |                          |
+        v                          |
+analysis/refinement                |
+        |                          |
+        v                          |
+design artifact                   |
+        |                          |
+        v                          |
+review ----------------------------+
+        |
+        v
+human approval
+#+end_src
+
+=emacs-auto-research= owns the generic artifact-management and human-decision
+part of that picture.  It intentionally does not own the agent scheduler or the
+workflow state machine.
+
+** ARADR vs workflow engines
+
+ARADR is a workflow/policy concept.  =emacs-auto-research= is a control-plane UI
+and artifact library.
+
+A project may use:
+
+- a human-only ARADR process;
+- a shell/CI worker;
+- Agent Zero;
+- Prolog-RLM;
+- Consortium;
+- another future orchestrator.
+
+All of them can share the same research files and the same Emacs review UI.
+
+That separation is the whole point.
+
+See [[file:docs/ARADR.org][docs/ARADR.org]].
+
+* Architecture
+
+#+begin_src text
+                     +---------------------------+
+                     | external workflow plugins |
+                     +-------------+-------------+
+                                   |
+                                   v
+                     auto-research-plugin.el
+                                   |
+                                   v
+                     auto-research-project.el
+                                   |
+                                   v
+                        auto-research.el
+                      public entrypoints
+                         /           \
+                        v             v
+       auto-research-dashboard.el   auto-research-approval.el
+             unified UI                human decisions
+                        \             /
+                         v           v
+                    auto-research-metadata.el
+                     parse/repair/validate
+                             |
+                             v
+                    durable Org research
+
+                    auto-research-doom.el
+                 optional Evil compatibility
+#+end_src
+
+The architectural boundaries are deliberate:
+
+- dashboard code does not independently parse approval metadata;
+- metadata code does not render UI;
+- plugins do not become core dependencies;
+- personal paths/credentials do not live in package source;
+- an external workflow engine owns its own legal phase transitions.
+
+* Installation
+
+The current branch is the initial extraction and is suitable for direct
+checkout/development use.
+
+Manual checkout:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "/path/to/emacs-auto-research/lisp")
+(require 'auto-research)
+#+end_src
+
+Then configure projects and run:
+
+#+begin_src text
+M-x auto-research
+#+end_src
+
+Doom/straight packaging is intended to become a normal package declaration once
+the dotfile migration slice is completed.
+
+* Configuration
+
+See [[file:docs/CONFIGURATION.org][docs/CONFIGURATION.org]].
+
+The initial package deliberately does not hardcode gptel or a model.
+
+The planned AI-repair adapter will keep reusable gptel code here while personal
+provider/backend/model settings stay in the user's tangled =config.org=.
+The user's desired default is GLM 5.3 Flash; that is user configuration, not a
+library default.
+
+* Tests
+
+ERT tests live under =test/=.
+
+#+begin_src sh
+make test
+#+end_src
+
+The current tests cover:
+
+- repair of partial legacy approval metadata;
+- canonical repair idempotence;
+- failure on contradictory duplicate decisions;
+- project identity across multiple research roots;
+- plugin-contributed projects;
+- plugin observation of explicit human decisions;
+- direct-open research-file recognition.
+
+* Documentation
+
+- [[file:docs/ARADR.org][ARADR integration model]]
+- [[file:docs/METADATA.org][metadata contract]]
+- [[file:docs/CONFIGURATION.org][configuration]]
+- [[file:docs/PLUGINS.org][plugin API]]
+
+* Migration status
+
+This repository is the new canonical home for the generic implementation.
+
+The old dotfile implementation remains a migration source until this package is
+wired into the real Emacs configuration and verified.  After that, the old
+files should be reduced to compatibility/configuration or deleted.
+
+There must not be two authoritative copies of the dashboard, approval parser,
+or approval writer.
+
+* Initial-slice limitations / next work
+
+The current initial branch establishes the generic local control plane.  The old
+dashboard's complete GitHub-remote scan/PR-delivery behavior has not yet been
+ported into the new adapter architecture, so it must not be deleted from the
+user's dotfiles until parity is implemented and verified.
+
+Next slices:
+
+- port remote GitHub discovery/approval delivery as an optional adapter rather
+  than a core dependency;
+- project template/bootstrap command (=auto-research-init-project=);
+- project-local configuration/discovery;
+- optional gptel repair fallback only after deterministic repair fails;
+- user configuration in tangled =config.org= with GLM 5.3 Flash as the user's
+  default repair/research model;
+- finish dotfile migration and remove duplicate implementations;
+- richer plugin-contributed actions/lifecycle presentation without coupling the
+  package to Consortium or another workflow vocabulary.

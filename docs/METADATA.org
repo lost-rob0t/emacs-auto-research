@@ -1,0 +1,49 @@
+#+title: Research metadata contract
+
+* Canonical approval block
+
+The package writes one approval block immediately after the unique =#+status:=
+keyword:
+
+#+begin_src org
+#+approval_schema: auto-research.approval.v1
+#+approval_state: PENDING
+#+approval_actor: NONE
+#+approval_evidence: NONE
+#+approval_base_commit: NONE
+#+approval_base_blob: NONE
+#+approval_decided_at: NONE
+#+end_src
+
+Allowed approval states are:
+
+- =PENDING=
+- =APPROVED=
+- =REJECTED=
+
+For =PENDING=, decision fields are normalized to =NONE=.
+
+* Legacy migration
+
+The deterministic migrator currently recognizes these historical schema IDs:
+
+- =prolog-rlm.research-approval.v1=
+- =adard.research-approval.v1=
+
+It also repairs partial blocks where the meaning is unambiguous.
+
+The migrator removes recognized approval keyword lines and inserts one
+canonical block.  Unrelated Org prose/headings are left alone.
+
+Equivalent duplicates collapse.  Conflicting duplicate values signal a
+=user-error= instead of choosing one.
+
+* Decision provenance
+
+When approving or rejecting a local file, the package attempts to record:
+
+- the current Git =HEAD= as =approval_base_commit=;
+- the file's =HEAD:<path>= blob as =approval_base_blob=.
+
+When those values cannot be proven, they remain =NONE=.  This is provenance,
+not workflow authority.
