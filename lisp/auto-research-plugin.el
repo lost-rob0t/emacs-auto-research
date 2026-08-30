@@ -12,11 +12,14 @@ ID is a stable symbol/string.
 PROJECT-PROVIDER is a zero-argument function returning project plists in the
 same shape as `auto-research-projects'.
 DOCUMENT-PREDICATE, when non-nil, receives FILE and may claim/recognize it.
+DASHBOARD-PROVIDER, when non-nil, receives (SCOPE EMIT DONE).  It may discover
+external research asynchronously.  EMIT receives a list of dashboard items and
+DONE receives an optional error string.
 ACTIONS is a function receiving a context plist and returning action plists.
-AFTER-DECISION is called with FILE, STATE and PROJECT after a human decision is
-persisted.  Hooks may observe or enqueue work, but must not rewrite the human
-approval decision behind the core package's back."
-  id project-provider document-predicate actions after-decision)
+AFTER-DECISION is called with FILE, STATE and PROJECT after a local human
+decision is persisted.  Hooks may observe or enqueue work, but must not rewrite
+the human approval decision behind the core package's back."
+  id project-provider document-predicate dashboard-provider actions after-decision)
 
 (defvar auto-research--plugins nil
   "Registered `auto-research-plugin' objects.")
@@ -25,7 +28,7 @@ approval decision behind the core package's back."
   "Register PLUGIN and return it.
 
 Registration replaces an existing plugin with the same ID.  The core package
-never requires any plugin by name, so workflow engines such as Consortium can
+never requires any plugin by name, so workflow engines and remote backends can
 integrate without becoming dependencies of emacs-auto-research."
   (unless (auto-research-plugin-p plugin)
     (signal 'wrong-type-argument (list 'auto-research-plugin plugin)))
@@ -66,6 +69,13 @@ integrate without becoming dependencies of emacs-auto-research."
                        (error-message-string error-data))
                :warning)
               nil))))
+
+(defun auto-research-plugin-dashboard-providers ()
+  "Return (PLUGIN-ID . PROVIDER) pairs for external dashboard sources."
+  (cl-loop for plugin in (auto-research-plugins)
+           for provider = (auto-research-plugin-dashboard-provider plugin)
+           when provider
+           collect (cons (auto-research-plugin-id plugin) provider)))
 
 (defun auto-research-plugin-after-decision (file state project)
   "Notify registered plugins after STATE is persisted for FILE in PROJECT.
