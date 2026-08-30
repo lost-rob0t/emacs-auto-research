@@ -1,9 +1,359 @@
 #+title: emacs-auto-research
+#+author: lost-rob0t
 
-Generic Emacs control plane for browsing, creating, repairing, and deciding research documents across multiple projects.
+* emacs-auto-research
 
-The reusable package lives here; project repositories contain research data and lightweight configuration only.
+=emacs-auto-research= is a generic Emacs control plane for durable research.
+It combines the old research dashboard, approval UI, open-document review flow,
+project scoping, metadata repair, and new-research creation into one package.
 
-* Status
+The package is intentionally *not* StarIntel-specific.  StarIntel, Prolog-RLM,
+org-vector, a one-off investigation repository, or any normal software project
+can all be registered as research projects without changing package code.
 
-Initial package extraction from the author's dotfiles is in progress.
+The main command is:
+
+#+begin_src text
+M-x auto-research
+#+end_src
+
+That command opens the single unified dashboard.  There is no separate
+"research dashboard" product and no second approval UI.
+
+* Why this exists
+
+The original implementation grew in Doom dotfiles as several separate files:
+
+- =research-dashboard.el=
+- =research-dashboard-evil.el=
+- =research-approval.el=
+- =starintel-research.el=
+
+That worked, but it mixed reusable research mechanics with one user's editor
+configuration and with StarIntel naming.  It also created two bad UX seams:
+
+1. browsing research and approving research were separate systems;
+2. partial/legacy approval metadata could make the human approval action fail
+   with =Partial/noncanonical approval metadata exists=.
+
+This package fixes the boundary.  Reusable behavior lives here.  Dotfiles only
+load/configure it.  Projects only contain research artifacts and lightweight
+project configuration.
+
+* Current feature set
+
+** One control plane
+
+=M-x auto-research= shows research from all configured projects by default.
+The dashboard displays:
+
+- approval state;
+- project;
+- research lifecycle;
+- title;
+- repository-relative path.
+
+The same command surface owns navigation, creation, search, project scope, and
+human decisions.
+
+** Project-scoped research
+
+Projects are generic plists.  Each project defines a repository root and the
+research control-plane directory within that repository.
+
+#+begin_src emacs-lisp
+(setq auto-research-projects
+      '((:id prolog-rlm
+         :name "Prolog RLM"
+         :root "~/Documents/Projects/prolog-rlm"
+         :research-root "research")
+        (:id starintel-research
+         :name "StarIntel Research"
+         :root "~/starintel/starintel-auto-research"
+         :research-root "roam/research")))
+#+end_src
+
+The default dashboard scope is *ALL PROJECTS*.
+
+Use:
+
+- =p= to choose one project;
+- =A= to return to all projects;
+- =M-x auto-research-current-project= to open the dashboard directly on the
+  configured project containing the current =project.el= root.
+
+Research IDs and file names are scoped by project identity, so two repositories
+can both contain =RESEARCH-001.org= without colliding in the UI.
+
+** Open research and approve it directly
+
+Opening a dashboard row visits the real Org file and enables
+=auto-research-document-mode=.
+
+From the open research document:
+
+#+begin_src text
+C-c C-a    approve
+C-c C-r    reject
+#+end_src
+
+The same =auto-research-approve= command works from the dashboard and from an
+open research buffer.  There is no need to return to a separate approval
+buffer merely to hit the human gate.
+
+** Deterministic metadata repair
+
+The approval layer no longer treats every noncanonical legacy file as a fatal
+condition.
+
+Before a decision is written, known approval metadata is parsed and normalized
+into one canonical block directly after =#+status:=.
+
+The repair path handles deterministic cases such as:
+
+- partial approval blocks;
+- old =prolog-rlm.research-approval.v1= schema records;
+- old =adard.research-approval.v1= schema records;
+- missing canonical fields that can safely become =NONE=;
+- duplicate equivalent keyword values;
+- old block placement.
+
+The final persisted representation is always the package's canonical schema:
+
+#+begin_src org
+#+approval_schema: auto-research.approval.v1
+#+approval_state: PENDING
+#+approval_actor: NONE
+#+approval_evidence: NONE
+#+approval_base_commit: NONE
+#+approval_base_blob: NONE
+#+approval_decided_at: NONE
+#+end_src
+
+Approval/rejection fills the decision fields and records best-effort Git commit
+and blob provenance when available.
+
+Repair is idempotent: once canonicalized, repeating repair should not keep
+rewriting the file.
+
+Conflicting duplicates are *not* guessed.  If a document says both =PENDING=
+and =APPROVED=, the package stops and asks for human resolution instead of
+silently choosing one.
+
+** Create new research
+
+Press =n= in the dashboard or call =M-x auto-research-new=.
+
+When scoped to one project, the new document goes there.  In =ALL PROJECTS=
+scope, Emacs asks which configured project owns the new research.
+
+New documents start as normal Org files with:
+
+- a title;
+- =DRAFT= lifecycle;
+- canonical =PENDING= approval metadata;
+- research question;
+- findings;
+- sources;
+- decision notes.
+
+The default filename strategy is deliberately simple and customizable through
+=auto-research-new-file-name-function=.
+
+** Vanilla Emacs first, Doom/Evil compatible
+
+Evil is *not* a dependency and is not assumed.
+
+Normal Emacs keymaps are the package baseline.  If Evil is present, the package
+loads =auto-research-evil.el= after Evil and installs equivalent motion/normal
+state bindings.  This makes Doom Emacs work out of the box without making the
+package itself an Evil-mode package.
+
+Dashboard keys:
+
+| Key | Action |
+|-----+--------|
+| RET | Open research |
+| a | Approve |
+| R | Reject |
+| n | New research |
+| p | Select project |
+| A | All projects |
+| / | Search |
+| g | Refresh |
+
+The open-document bindings =C-c C-a= and =C-c C-r= remain available regardless
+of Evil.
+
+* Architecture
+
+The package is split by responsibility:
+
+#+begin_src text
+lisp/auto-research.el
+        public entrypoints + new research
+              |
+              +-----------------------------+
+              |                             |
+              v                             v
+lisp/auto-research-dashboard.el     lisp/auto-research-approval.el
+        unified UI                    human decision UX
+              |                             |
+              +-------------+---------------+
+                            |
+                            v
+                 lisp/auto-research-metadata.el
+                 parse / validate / repair / write
+                            |
+                            v
+                  durable Org research files
+
+lisp/auto-research-project.el
+        project registry + research roots
+
+lisp/auto-research-evil.el
+        optional Doom/Evil compatibility only
+#+end_src
+
+UI code should never grow its own approval parser.  Approval code should never
+own dashboard rendering.  Personal model/provider credentials do not belong in
+this repository.
+
+* ARADR and this package
+
+ARADR is the broader research-to-design workflow this control plane is intended
+to support: research begins from a concrete problem/seed, evidence is made
+durable, analysis is refined until the problem is understood well enough to
+produce a design, the design is reviewed/adversarially challenged, and human
+authority gates irreversible transitions such as accepting a design or allowing
+implementation.
+
+The important property is not the acronym painted on the UI; it is that each
+phase leaves inspectable artifacts instead of hiding state in an agent chat.
+An ARADR-style run therefore looks roughly like:
+
+#+begin_src text
+seed / issue / question
+        |
+        v
+analysis + research
+        |
+        |  gather evidence, enumerate unknowns, update durable Org files
+        v
+refined analysis
+        |
+        v
+design candidate
+        |
+        v
+review / adversarial review
+        |
+        +------ revise / more research ------+
+        |                                     |
+        v                                     |
+human approval gate <-------------------------+
+        |
+        v
+implementation may be handed to a separate executor
+#+end_src
+
+Existing StarIntel policy artifacts describe the concrete research-to-design
+cycle as an Analyze/Research/Design/Review workflow with an explicit operator
+implementation gate.  Other repositories also use the related ADARD execution
+cycle (analyze, design, adversarial review, resolve, develop, then verify).
+=emacs-auto-research= deliberately does not hard-code either project's phase
+engine.  It supplies the generic *artifact/control-plane layer* needed by these
+workflows:
+
+- find every research artifact;
+- scope them by project;
+- open and inspect the real file;
+- create new durable research;
+- display lifecycle/approval state;
+- repair old approval metadata;
+- capture an explicit human decision from the dashboard or open file.
+
+That makes ARADR/ARDR/ADARD policy an integration above the generic package,
+not a reason to fork another dashboard.
+
+* Human gates
+
+A human gate should be cheap to operate but strict in what it persists.
+
+The intended UX is:
+
+#+begin_src text
+read research
+    |
+    v
+hit approve
+    |
+    v
+parse metadata
+    |
+    +-- canonical ------------------+
+    |                               |
+    +-- safely repairable -> repair |
+                                    v
+                               validate
+                                    |
+                                    v
+                           write APPROVED
+#+end_src
+
+"Strict" therefore means the final file is canonical.  It does *not* mean an
+old but unambiguous document should trap the operator in manual metadata edits.
+
+* Installation
+
+This repository is currently designed for direct package checkout/use while the
+migration from dotfiles is completed.
+
+With Doom/straight, a package declaration can point at this repository and add
+=lisp/= to the package load path.  The exact final packaging recipe will be
+added once the dotfile migration slice lands.
+
+For a manual checkout:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "/path/to/emacs-auto-research/lisp")
+(require 'auto-research)
+#+end_src
+
+Then configure =auto-research-projects= and run:
+
+#+begin_src text
+M-x auto-research
+#+end_src
+
+* Tests
+
+ERT tests live under =test/=.  They cover the initial extraction invariants:
+
+- partial legacy approval metadata repairs before approval;
+- canonical repair is idempotent;
+- contradictory duplicate decisions fail closed;
+- projects keep independent research identities.
+
+The next slices should add batch test wiring and broader UI/new-project fixtures.
+
+* Migration status
+
+This repository is the new canonical home for the generic implementation.
+The old Doom-dotfile files remain the migration source until the package is
+proven in the user's real configuration.  A later slice will reduce those files
+to package loading/configuration or remove them entirely.
+
+Do not maintain two authoritative implementations after that migration.
+
+* Planned next slices
+
+- project template/bootstrap command (=auto-research-init-project=);
+- project-local configuration file/discovery;
+- optional gptel repair fallback *only after deterministic repair fails*;
+- configurable gptel backend/model with personal defaults in tangled
+  =config.org= rather than package source;
+- GLM 5.3 Flash as the user's configured default, not a library hard-code;
+- optional remote/GitHub adapter for research that is not checked out locally;
+- richer ARADR lifecycle adapters without coupling the core package to one
+  workflow vocabulary.
