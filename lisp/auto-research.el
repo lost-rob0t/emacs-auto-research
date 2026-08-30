@@ -95,10 +95,10 @@
   (interactive)
   (auto-research-dashboard 'all))
 
-;; Doom users usually have Evil loaded, while vanilla Emacs users often do not.
-;; Keep Evil entirely optional and activate compatibility only when it exists.
+;; Vanilla Emacs is the baseline.  Doom compatibility is additive and loaded
+;; only after Evil exists, so the package never depends on Evil.
 (with-eval-after-load 'evil
-  (require 'auto-research-evil nil t))
+  (require 'auto-research-doom nil t))
 
 (provide 'auto-research)
 ;;; auto-research.el ends here
