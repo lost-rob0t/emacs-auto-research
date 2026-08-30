@@ -10,8 +10,8 @@ Those systems can integrate *as plugins*.
 A plugin may currently contribute:
 
 - research projects/control-plane roots;
-- a document recognizer;
-- integration-specific actions;
+- a document recognizer slot for future specialized discovery;
+- integration-specific actions exposed through the unified UI;
 - an after-decision callback that observes an explicit human approval/rejection.
 
 The core package remains the authority for canonical approval metadata and the
@@ -31,6 +31,14 @@ human-facing decision UX.
        :name "My Project"
        :root "~/src/my-project"
        :research-root "research")))
+  :actions
+  (lambda (context)
+    (list
+     (list :id 'inspect-workflow
+           :label "Inspect workflow state"
+           :command
+           (lambda (context)
+             (message "Inspect %s" (plist-get context :file))))))
   :after-decision
   (lambda (file state project)
     (message "Workflow saw %s for %s" state file))))
@@ -41,6 +49,35 @@ Project plists returned by =:project-provider= use the same schema as
 projects do not get a second UI.
 
 Duplicate project IDs fail closed.
+
+* Plugin actions
+
+The =:actions= provider receives a context plist.
+
+Typical fields are:
+
+- =:source= — =dashboard= or =document=;
+- =:file= — absolute research file path;
+- =:project= — normalized =auto-research-project=;
+- =:item= — dashboard item when invoked from the dashboard.
+
+Return zero or more action plists with:
+
+- =:id= — stable action identifier;
+- =:label= — human-facing label;
+- =:command= — function receiving the context plist.
+
+Users invoke plugin actions with:
+
+| Context | Vanilla Emacs | Doom/Evil |
+|---------+---------------+-----------|
+| Dashboard | =x= | =x= |
+| Open research document | =C-c C-x= | =x= |
+
+The UI prompts when more than one plugin action is available.
+
+This makes the package useful as a frontend plugin without requiring it to know
+anything about the external workflow's state machine.
 
 * Consortium integration
 
@@ -54,20 +91,23 @@ Conceptually:
  (auto-research-plugin-create
   :id 'consortium
   :project-provider #'consortium-auto-research-projects
+  :actions #'consortium-auto-research-actions
   :after-decision #'consortium-auto-research-after-decision))
 #+end_src
 
-That adapter can translate an =APPROVED= research/design artifact into whatever
-Consortium control-plane event is legal under Consortium's own state machine.
+That adapter can expose actions like "show run", "resume analysis", or "open
+design" and can translate an =APPROVED= artifact into whatever Consortium
+control-plane event is legal under Consortium's own state machine.
+
 The adapter must not make =emacs-auto-research= require Consortium, and the core
 package must not encode Consortium phase transitions.
 
 * Authority boundary
 
-Plugins can observe decisions and contribute projects, but they should not
-silently reinterpret an explicit human decision.  A workflow engine remains
-responsible for deciding whether a given approval is sufficient to advance its
-own state machine.
+Plugins can observe decisions, contribute projects, and expose explicit actions,
+but they should not silently reinterpret or rewrite a human decision.  A
+workflow engine remains responsible for deciding whether a given approval is
+sufficient to advance its own state machine.
 
 This separation keeps the Emacs package reusable while still making it a useful
 frontend/control plugin for larger systems.
