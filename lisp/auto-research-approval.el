@@ -19,10 +19,11 @@
 (defvar-local auto-research-document-project nil)
 
 (defun auto-research-approval--target-file ()
-  "Return the research file targeted by the current context."
+  "Return the local research file targeted by the current context."
   (cond
    ((derived-mode-p 'auto-research-dashboard-mode)
-    (auto-research-item-file (auto-research-dashboard-at-point)))
+    (or (auto-research-item-file (auto-research-dashboard-at-point))
+        (user-error "Selected research item is remote")))
    ((and buffer-file-name (derived-mode-p 'org-mode))
     buffer-file-name)
    (t (user-error "Point is not on a research item and this is not an Org research file"))))
@@ -80,27 +81,70 @@
         (insert updated)))
     updated))
 
+(defun auto-research-approval--read-identity ()
+  "Prompt for the human actor and durable evidence string."
+  (let ((actor (read-string "Decision maker: " auto-research-default-approval-actor))
+        (evidence (read-string "Approval evidence: " auto-research-default-approval-evidence)))
+    (when (string-empty-p (string-trim actor))
+      (user-error "Decision maker must be nonempty"))
+    (when (string-empty-p (string-trim evidence))
+      (user-error "Approval evidence must be nonempty"))
+    (list actor evidence)))
+
+(defun auto-research-approval--decide-external (item state actor evidence)
+  "Run external decision handler for ITEM."
+  (let ((handler (auto-research-item-decision-function item))
+        (dashboard (current-buffer)))
+    (unless handler
+      (user-error "Selected remote research item does not support decisions"))
+    (when (auto-research-item-busy item)
+      (user-error "Decision already running"))
+    (setf (auto-research-item-busy item) t)
+    (auto-research-dashboard--render)
+    (funcall
+     handler item state actor evidence
+     (lambda (ok message-text)
+       (when (buffer-live-p dashboard)
+         (with-current-buffer dashboard
+           (setf (auto-research-item-busy item) nil)
+           (if ok
+               (progn
+                 (message "%s" (or message-text "Research decision delivered"))
+                 (auto-research-dashboard-refresh))
+             (push (or message-text "External research decision failed")
+                   auto-research-dashboard--errors)
+             (auto-research-dashboard--render)
+             (message "Research decision failed: %s"
+                      (or message-text "unknown error")))))))))
+
 (defun auto-research-decide (state)
   "Record research decision STATE in the current dashboard/file context."
-  (let* ((file (auto-research-approval--target-file))
-         (project (auto-research-approval--target-project file))
-         (actor (read-string "Decision maker: " auto-research-default-approval-actor))
-         (evidence (read-string "Approval evidence: " auto-research-default-approval-evidence)))
-    (auto-research-approval--write-decision file state actor evidence)
-    (auto-research-plugin-after-decision file state project)
-    (when (and buffer-file-name (file-equal-p file buffer-file-name))
-      (revert-buffer :ignore-auto :noconfirm))
-    (when (derived-mode-p 'auto-research-dashboard-mode)
-      (auto-research-dashboard-refresh))
-    (message "%s research: %s" state (file-name-nondirectory file))))
+  (pcase-let ((`(,actor ,evidence) (auto-research-approval--read-identity)))
+    (if (derived-mode-p 'auto-research-dashboard-mode)
+        (let ((item (auto-research-dashboard-at-point)))
+          (if (auto-research-item-decision-function item)
+              (auto-research-approval--decide-external item state actor evidence)
+            (let* ((file (or (auto-research-item-file item)
+                             (user-error "Research item has no decision handler")))
+                   (project (auto-research-item-project item)))
+              (auto-research-approval--write-decision file state actor evidence)
+              (auto-research-plugin-after-decision file state project)
+              (auto-research-dashboard-refresh)
+              (message "%s research: %s" state (file-name-nondirectory file)))))
+      (let* ((file (auto-research-approval--target-file))
+             (project (auto-research-approval--target-project file)))
+        (auto-research-approval--write-decision file state actor evidence)
+        (auto-research-plugin-after-decision file state project)
+        (when (and buffer-file-name (file-equal-p file buffer-file-name))
+          (revert-buffer :ignore-auto :noconfirm))
+        (message "%s research: %s" state (file-name-nondirectory file))))))
 
 (defun auto-research-approve ()
   "Approve the selected or currently open research document.
 
-This command is intentionally context-sensitive: use the same command from the
-unified dashboard or while reading an open research Org file.  Partial or legacy
-approval keywords are deterministically normalized before the decision is
-written."
+This command is context-sensitive.  Local documents are updated in place.
+External dashboard items may provide a decision handler such as the optional
+GitHub approval-PR backend."
   (interactive)
   (auto-research-decide "APPROVED"))
 
@@ -110,7 +154,7 @@ written."
   (auto-research-decide "REJECTED"))
 
 (defun auto-research-repair ()
-  "Deterministically repair approval metadata in the current research file."
+  "Deterministically repair approval metadata in the current local research file."
   (interactive)
   (let* ((file (auto-research-approval--target-file))
          (content (with-temp-buffer
