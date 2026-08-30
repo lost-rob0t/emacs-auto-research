@@ -1,0 +1,73 @@
+#+title: Plugin API
+
+* Goal
+
+=emacs-auto-research= is a standalone Emacs package.  It does not depend on
+Consortium, StarIntel, ARADR workers, RAGE, or any other workflow engine.
+
+Those systems can integrate *as plugins*.
+
+A plugin may currently contribute:
+
+- research projects/control-plane roots;
+- a document recognizer;
+- integration-specific actions;
+- an after-decision callback that observes an explicit human approval/rejection.
+
+The core package remains the authority for canonical approval metadata and the
+human-facing decision UX.
+
+* Registering a plugin
+
+#+begin_src emacs-lisp
+(require 'auto-research-plugin)
+
+(auto-research-register-plugin
+ (auto-research-plugin-create
+  :id 'my-workflow
+  :project-provider
+  (lambda ()
+    '((:id my-project
+       :name "My Project"
+       :root "~/src/my-project"
+       :research-root "research")))
+  :after-decision
+  (lambda (file state project)
+    (message "Workflow saw %s for %s" state file))))
+#+end_src
+
+Project plists returned by =:project-provider= use the same schema as
+=auto-research-projects=.  They are merged into the normal dashboard, so plugin
+projects do not get a second UI.
+
+Duplicate project IDs fail closed.
+
+* Consortium integration
+
+Consortium should live in its own repository/package and register an
+=auto-research-plugin= from there.
+
+Conceptually:
+
+#+begin_src emacs-lisp
+(auto-research-register-plugin
+ (auto-research-plugin-create
+  :id 'consortium
+  :project-provider #'consortium-auto-research-projects
+  :after-decision #'consortium-auto-research-after-decision))
+#+end_src
+
+That adapter can translate an =APPROVED= research/design artifact into whatever
+Consortium control-plane event is legal under Consortium's own state machine.
+The adapter must not make =emacs-auto-research= require Consortium, and the core
+package must not encode Consortium phase transitions.
+
+* Authority boundary
+
+Plugins can observe decisions and contribute projects, but they should not
+silently reinterpret an explicit human decision.  A workflow engine remains
+responsible for deciding whether a given approval is sufficient to advance its
+own state machine.
+
+This separation keeps the Emacs package reusable while still making it a useful
+frontend/control plugin for larger systems.
