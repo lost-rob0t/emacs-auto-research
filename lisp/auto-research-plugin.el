@@ -2,6 +2,7 @@
 
 (require 'cl-lib)
 (require 'seq)
+(require 'subr-x)
 
 (cl-defstruct (auto-research-plugin
                (:constructor auto-research-plugin-create))
@@ -11,8 +12,7 @@ ID is a stable symbol/string.
 PROJECT-PROVIDER is a zero-argument function returning project plists in the
 same shape as `auto-research-projects'.
 DOCUMENT-PREDICATE, when non-nil, receives FILE and may claim/recognize it.
-ACTIONS is a function receiving the current research item/file and returning
-extra action descriptors for an integration-specific UI.
+ACTIONS is a function receiving a context plist and returning action plists.
 AFTER-DECISION is called with FILE, STATE and PROJECT after a human decision is
 persisted.  Hooks may observe or enqueue work, but must not rewrite the human
 approval decision behind the core package's back."
@@ -62,6 +62,44 @@ integrate without becoming dependencies of emacs-auto-research."
   (dolist (plugin (auto-research-plugins))
     (when-let ((callback (auto-research-plugin-after-decision plugin)))
       (funcall callback file state project))))
+
+(defun auto-research-plugin-actions-for-context (context)
+  "Return normalized plugin actions available for CONTEXT.
+
+Each action provider returns plists with at least :id, :label and :command.
+:command receives CONTEXT.  The returned action is annotated with :plugin."
+  (cl-loop for plugin in (auto-research-plugins)
+           for provider = (auto-research-plugin-actions plugin)
+           when provider
+           append
+           (mapcar
+            (lambda (action)
+              (unless (and (plist-get action :id)
+                           (stringp (plist-get action :label))
+                           (functionp (plist-get action :command)))
+                (user-error "Plugin %s returned an invalid action: %S"
+                            (auto-research-plugin-id plugin) action))
+              (let ((copy (copy-sequence action)))
+                (plist-put copy :plugin (auto-research-plugin-id plugin))
+                copy))
+            (or (funcall provider context) nil))))
+
+(defun auto-research-plugin-run-action (context)
+  "Prompt for and run a plugin action for CONTEXT."
+  (let* ((actions (auto-research-plugin-actions-for-context context))
+         (choices
+          (mapcar
+           (lambda (action)
+             (cons (format "%s: %s"
+                           (plist-get action :plugin)
+                           (plist-get action :label))
+                   action))
+           actions)))
+    (unless choices
+      (user-error "No plugin actions are available here"))
+    (let* ((choice (completing-read "Research plugin action: " choices nil t))
+           (action (cdr (assoc choice choices))))
+      (funcall (plist-get action :command) context))))
 
 (provide 'auto-research-plugin)
 ;;; auto-research-plugin.el ends here
