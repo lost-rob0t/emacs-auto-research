@@ -1,0 +1,6 @@
+#+title: Research directory
+
+This directory contains durable research artifacts consumed by
+=emacs-auto-research=.
+
+Use =M-x auto-research-new= from Emacs to create canonical research documents.
