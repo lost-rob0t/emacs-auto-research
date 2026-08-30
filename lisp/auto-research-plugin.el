@@ -55,13 +55,32 @@ integrate without becoming dependencies of emacs-auto-research."
   (cl-loop for plugin in (auto-research-plugins)
            for provider = (auto-research-plugin-project-provider plugin)
            when provider
-           append (or (funcall provider) nil)))
+           append
+           (condition-case error-data
+               (or (funcall provider) nil)
+             (error
+              (display-warning
+               'auto-research
+               (format "Plugin %s project provider failed: %s"
+                       (auto-research-plugin-id plugin)
+                       (error-message-string error-data))
+               :warning)
+              nil))))
 
 (defun auto-research-plugin-after-decision (file state project)
-  "Notify registered plugins after STATE is persisted for FILE in PROJECT."
+  "Notify registered plugins after STATE is persisted for FILE in PROJECT.
+Plugin failures are warnings because the human decision is already durable."
   (dolist (plugin (auto-research-plugins))
     (when-let ((callback (auto-research-plugin-after-decision plugin)))
-      (funcall callback file state project))))
+      (condition-case error-data
+          (funcall callback file state project)
+        (error
+         (display-warning
+          'auto-research
+          (format "Plugin %s failed after %s decision for %s: %s"
+                  (auto-research-plugin-id plugin) state file
+                  (error-message-string error-data))
+          :warning))))))
 
 (defun auto-research-plugin-actions-for-context (context)
   "Return normalized plugin actions available for CONTEXT.
