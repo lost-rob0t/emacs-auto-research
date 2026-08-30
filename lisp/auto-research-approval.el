@@ -3,6 +3,8 @@
 (require 'subr-x)
 (require 'auto-research-metadata)
 (require 'auto-research-dashboard)
+(require 'auto-research-plugin)
+(require 'auto-research-project)
 
 (defcustom auto-research-default-approval-actor user-full-name
   "Default human actor recorded for research decisions."
@@ -63,9 +65,13 @@
 (defun auto-research-decide (state)
   "Record research decision STATE in the current dashboard/file context."
   (let* ((file (auto-research-approval--target-file))
+         (project (or (and auto-research-document-project
+                           (auto-research-project-by-id auto-research-document-project))
+                      (auto-research-project-at-directory (file-name-directory file))))
          (actor (read-string "Decision maker: " auto-research-default-approval-actor))
          (evidence (read-string "Approval evidence: " auto-research-default-approval-evidence)))
     (auto-research-approval--write-decision file state actor evidence)
+    (auto-research-plugin-after-decision file state project)
     (when (and buffer-file-name (file-equal-p file buffer-file-name))
       (revert-buffer :ignore-auto :noconfirm))
     (when (derived-mode-p 'auto-research-dashboard-mode)
