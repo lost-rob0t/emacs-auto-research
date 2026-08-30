@@ -3,16 +3,19 @@
 * Goal
 
 =emacs-auto-research= is a standalone Emacs package.  It does not depend on
-Consortium, StarIntel, ARADR workers, RAGE, or any other workflow engine.
+Consortium, StarIntel, ARADR workers, RAGE, GitHub, or any other workflow
+engine/backend.
 
 Those systems can integrate *as plugins*.
 
-A plugin may currently contribute:
+A plugin may contribute:
 
 - research projects/control-plane roots;
 - a document recognizer slot for future specialized discovery;
+- asynchronous external dashboard items;
 - integration-specific actions exposed through the unified UI;
-- an after-decision callback that observes an explicit human approval/rejection.
+- an after-decision callback that observes an explicit local human
+  approval/rejection.
 
 The core package remains the authority for canonical approval metadata and the
 human-facing decision UX.
@@ -50,6 +53,40 @@ projects do not get a second UI.
 
 Duplicate project IDs fail closed.
 
+* External dashboard providers
+
+=:dashboard-provider= supports sources that are not local files, including the
+optional GitHub adapter.
+
+The provider is called as:
+
+#+begin_src text
+(PROVIDER SCOPE EMIT DONE)
+#+end_src
+
+- =SCOPE= is =all= or the selected local project ID.
+- =EMIT= accepts a list of =auto-research-item= objects and may be called many
+  times as asynchronous results arrive.
+- =DONE= must be called once with nil on success or an error string when the
+  source finishes with recoverable failures.
+
+External items are built with =auto-research-dashboard-make-item=.  They should
+supply a stable =:id=, display project/path, title/lifecycle/approval, and an
+=:open-function=.  A writable backend may also supply =:decision-function=.
+
+A decision function is called as:
+
+#+begin_src text
+(DECIDE ITEM STATE ACTOR EVIDENCE DONE)
+#+end_src
+
+Its =DONE= callback receives =(OK MESSAGE)=.  This lets remote backends do
+asynchronous race checks and durable delivery while the core dashboard owns the
+busy state, error reporting, and refresh.
+
+The GitHub backend uses this contract to stream remote research into the same
+=M-x auto-research= dashboard without making GitHub a core dependency.
+
 * Plugin actions
 
 The =:actions= provider receives a context plist.
@@ -57,8 +94,8 @@ The =:actions= provider receives a context plist.
 Typical fields are:
 
 - =:source= — =dashboard= or =document=;
-- =:file= — absolute research file path;
-- =:project= — normalized =auto-research-project=;
+- =:file= — absolute local research file path, or nil for an external item;
+- =:project= — normalized local =auto-research-project=, or nil;
 - =:item= — dashboard item when invoked from the dashboard.
 
 Return zero or more action plists with:
@@ -72,12 +109,9 @@ Users invoke plugin actions with:
 | Context | Vanilla Emacs | Doom/Evil |
 |---------+---------------+-----------|
 | Dashboard | =x= | =x= |
-| Open research document | =C-c C-x= | =x= |
+| Open local research document | =C-c C-x= | =x= |
 
 The UI prompts when more than one plugin action is available.
-
-This makes the package useful as a frontend plugin without requiring it to know
-anything about the external workflow's state machine.
 
 * Consortium integration
 
@@ -96,7 +130,7 @@ Conceptually:
 #+end_src
 
 That adapter can expose actions like "show run", "resume analysis", or "open
-design" and can translate an =APPROVED= artifact into whatever Consortium
+design" and can translate an =APPROVED= local artifact into whatever Consortium
 control-plane event is legal under Consortium's own state machine.
 
 The adapter must not make =emacs-auto-research= require Consortium, and the core
@@ -104,10 +138,9 @@ package must not encode Consortium phase transitions.
 
 * Authority boundary
 
-Plugins can observe decisions, contribute projects, and expose explicit actions,
-but they should not silently reinterpret or rewrite a human decision.  A
-workflow engine remains responsible for deciding whether a given approval is
-sufficient to advance its own state machine.
+Plugins can observe local decisions, contribute projects/items, expose explicit
+actions, and implement an external item's own durable decision delivery.  They
+must not silently reinterpret or rewrite decisions owned by another backend.
 
-This separation keeps the Emacs package reusable while still making it a useful
-frontend/control plugin for larger systems.
+A workflow engine remains responsible for deciding whether a given approval is
+sufficient to advance its own state machine.
