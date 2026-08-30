@@ -2,7 +2,7 @@
 
 * Projects
 
-Configure projects with =auto-research-projects=:
+Configure local projects with =auto-research-projects=:
 
 #+begin_src emacs-lisp
 (setq auto-research-projects
@@ -17,6 +17,55 @@ Configure projects with =auto-research-projects=:
 =M-x auto-research= always begins in all-projects scope.
 =M-x auto-research-current-project= scopes to the configured project containing
 the current =project.el= root.
+
+* GitHub remote discovery
+
+GitHub support is an optional adapter.  Core =auto-research= does not require
+GitHub or =gh=.
+
+Enable it explicitly:
+
+#+begin_src emacs-lisp
+(require 'auto-research-github)
+(auto-research-github-enable)
+#+end_src
+
+The adapter requires an authenticated GitHub CLI.  With
+=auto-research-github-owners= set to nil, it scans repositories owned by the
+authenticated user plus visible organizations.  To pin discovery to specific
+owners:
+
+#+begin_src emacs-lisp
+(setq auto-research-github-owners '("lost-rob0t" "starintel-labs"))
+#+end_src
+
+Remote discovery is asynchronous and appears in the normal =M-x auto-research=
+dashboard.  Selecting a specific local project with =p= suppresses remote
+scanning until returning to =ALL PROJECTS=.
+
+Remote decisions preserve the old safety boundary:
+
+- fetch the current default-branch head;
+- verify the reviewed blob/content still matches;
+- render the canonical approval preview;
+- recheck branch head and blob/content immediately before writing;
+- create an approval-only branch and pull request;
+- by default, immediately rebase-merge that PR with the expected commit SHA.
+
+Configure delivery with:
+
+#+begin_src emacs-lisp
+(setq auto-research-github-auto-merge-decisions t
+      auto-research-github-merge-method "rebase"
+      auto-research-github-max-workers 6)
+#+end_src
+
+Set =auto-research-github-auto-merge-decisions= to nil when approval PRs should
+remain open for a separate merge gate.
+
+Legacy =REVIEW=/=RESEARCHED=/=VERIFIED= research without approval metadata stays
+hidden remotely by default.  Set =auto-research-github-show-legacy-default= to
+t to include it.
 
 * Approval defaults
 
@@ -41,5 +90,5 @@ The initial slices intentionally contain no LLM dependency.  A later adapter
 will provide an optional gptel fallback for repair cases that deterministic
 migration cannot solve.
 
-Provider credentials, backend choice, and the user's GLM 5.3 Flash default
-belong in the user's tangled =config.org=, not in this package.
+Provider credentials, backend choice, and personal model configuration belong
+in the user's tangled =config.org=, not in this package.
