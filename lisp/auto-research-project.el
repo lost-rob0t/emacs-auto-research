@@ -4,6 +4,7 @@
 (require 'project)
 (require 'seq)
 (require 'subr-x)
+(require 'auto-research-plugin)
 
 (defgroup auto-research nil
   "Generic research control plane for Emacs."
@@ -15,6 +16,9 @@
 Each entry is a plist with at least :id and :root.  :name defaults to
 :id.  :research-root defaults to \"research\" and may be absolute or
 relative to :root.
+
+Plugins may contribute additional project plists through the
+`auto-research-plugin' API.
 
 Example:
 
@@ -58,9 +62,24 @@ Example:
      :root root
      :research-root research-root)))
 
+(defun auto-research-project--all-plists ()
+  "Return statically configured and plugin-contributed project plists."
+  (append auto-research-projects
+          (auto-research-plugin-project-plists)))
+
 (defun auto-research-project-list ()
-  "Return normalized configured research projects."
-  (mapcar #'auto-research-project-from-plist auto-research-projects))
+  "Return normalized configured and plugin-contributed research projects.
+Signal when two sources claim the same project ID."
+  (let ((seen (make-hash-table :test #'equal))
+        projects)
+    (dolist (plist (auto-research-project--all-plists))
+      (let* ((project (auto-research-project-from-plist plist))
+             (id (auto-research-project-id project)))
+        (when (gethash id seen)
+          (user-error "Duplicate research project id: %s" id))
+        (puthash id t seen)
+        (push project projects)))
+    (nreverse projects)))
 
 (defun auto-research-project-by-id (id)
   "Return configured project matching ID, or nil."
@@ -79,7 +98,8 @@ Prefer the deepest matching root."
           (seq-filter
            (lambda (project)
              (let ((root (file-truename (auto-research-project-root project))))
-               (file-in-directory-p directory root)))
+               (or (file-equal-p directory root)
+                   (file-in-directory-p directory root))))
            (auto-research-project-list))))
     (car (sort matches
                (lambda (a b)
@@ -111,7 +131,7 @@ PROMPT defaults to \"Research project: \"."
                                   project))
                           projects)))
     (unless choices
-      (user-error "No `auto-research-projects' are configured"))
+      (user-error "No auto-research projects are configured"))
     (cdr (assoc (completing-read (or prompt "Research project: ")
                                  choices nil t)
                 choices))))
