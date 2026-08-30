@@ -78,7 +78,6 @@
       (lambda (file state project)
         (setq observed (list file state project)))))
     (auto-research-plugin-after-decision "/tmp/research.org" "APPROVED" nil)
-    (should (equal '(/tmp/research.org) nil))
     (should (equal (car observed) "/tmp/research.org"))
     (should (equal (cadr observed) "APPROVED"))
     (should-not (caddr observed))))
