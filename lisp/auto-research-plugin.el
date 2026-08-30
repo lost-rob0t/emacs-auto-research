@@ -77,7 +77,7 @@ integrate without becoming dependencies of emacs-auto-research."
            when provider
            collect (cons (auto-research-plugin-id plugin) provider)))
 
-(defun auto-research-plugin-after-decision (file state project)
+(defun auto-research-plugin-notify-after-decision (file state project)
   "Notify registered plugins after STATE is persisted for FILE in PROJECT.
 Plugin failures are warnings because the human decision is already durable."
   (dolist (plugin (auto-research-plugins))
