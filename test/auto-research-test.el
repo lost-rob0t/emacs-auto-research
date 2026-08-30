@@ -14,8 +14,12 @@
                   "APPROVED" "human" "human:test"
                   "abc" "def" "2026-08-29T20:00:00-04:00")))
     (should (auto-research-metadata-canonical-p updated))
-    (should (string-match-p "#+approval_schema: auto-research.approval.v1" updated))
-    (should (string-match-p "#+approval_state: APPROVED" updated))
+    (should (string-match-p
+             (regexp-quote "#+approval_schema: auto-research.approval.v1")
+             updated))
+    (should (string-match-p
+             (regexp-quote "#+approval_state: APPROVED")
+             updated))
     (should (string-match-p "Keep me\\." updated))))
 
 (ert-deftest auto-research-repair-is-idempotent ()
