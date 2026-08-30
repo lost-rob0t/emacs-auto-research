@@ -3,6 +3,7 @@
 (require 'ert)
 (require 'auto-research)
 (require 'auto-research-plugin)
+(require 'auto-research-github)
 
 (defconst auto-research-test--partial
   "#+title: Example\n#+status: REVIEW\n#+approval_schema: prolog-rlm.research-approval.v1\n#+approval_state: PENDING\n\n* Body\nKeep me.\n")
@@ -99,6 +100,64 @@
                    (auto-research-project-id
                     (auto-research-document-project-for-file file)))))
       (delete-directory dir t))))
+
+(ert-deftest auto-research-dashboard-accepts-async-external-items ()
+  (let ((auto-research-projects nil)
+        (auto-research--plugins nil))
+    (auto-research-register-plugin
+     (auto-research-plugin-create
+      :id 'remote-test
+      :dashboard-provider
+      (lambda (_scope emit done)
+        (funcall emit
+                 (list
+                  (auto-research-dashboard-make-item
+                   :id "remote::one"
+                   :display-project "owner/repo"
+                   :path "research/ONE.org"
+                   :title "Remote One"
+                   :lifecycle "REVIEW"
+                   :approval "PENDING"
+                   :open-function #'ignore)))
+        (funcall done nil))))
+    (with-temp-buffer
+      (auto-research-dashboard-mode)
+      (setq auto-research-dashboard--scope 'all)
+      (auto-research-dashboard-refresh)
+      (should (= 1 (length auto-research-dashboard--items)))
+      (should (= 0 auto-research-dashboard--pending-sources))
+      (should (equal "remote::one"
+                     (auto-research-dashboard--item-id
+                      (car auto-research-dashboard--items)))))))
+
+(ert-deftest auto-research-github-filters-research-paths ()
+  (should (auto-research-github--candidate-path-p "research/RESEARCH-001.org"))
+  (should (auto-research-github--candidate-path-p "roam/research/topic/item.org"))
+  (should-not (auto-research-github--candidate-path-p "docs/item.org"))
+  (should-not (auto-research-github--candidate-path-p "research/index.org")))
+
+(ert-deftest auto-research-github-builds-pending-remote-item ()
+  (let* ((auto-research-github-show-legacy-default nil)
+         (content
+          "#+title: Remote\n#+status: REVIEW\n#+approval_schema: auto-research.approval.v1\n#+approval_state: PENDING\n#+approval_actor: NONE\n#+approval_evidence: NONE\n#+approval_base_commit: NONE\n#+approval_base_blob: NONE\n#+approval_decided_at: NONE\n")
+         (item (auto-research-github--remote-item
+                "owner/repo" "main" "research/REMOTE.org" "blob" content)))
+    (should item)
+    (should (equal "github::owner/repo::research/REMOTE.org"
+                   (auto-research-item-id item)))
+    (should (eq #'auto-research-github-decide-item
+                (auto-research-item-decision-function item)))))
+
+(ert-deftest auto-research-github-legacy-items-are-opt-in ()
+  (let ((content "#+title: Legacy\n#+status: REVIEW\n"))
+    (let ((auto-research-github-show-legacy-default nil))
+      (should-not
+       (auto-research-github--remote-item
+        "owner/repo" "main" "research/LEGACY.org" "blob" content)))
+    (let ((auto-research-github-show-legacy-default t))
+      (should
+       (auto-research-github--remote-item
+        "owner/repo" "main" "research/LEGACY.org" "blob" content)))))
 
 (provide 'auto-research-test)
 ;;; auto-research-test.el ends here
