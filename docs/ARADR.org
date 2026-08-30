@@ -1,0 +1,80 @@
+#+title: ARADR integration model
+
+* Purpose
+
+=emacs-auto-research= is not an autonomous workflow engine.  It is the durable
+research artifact and human-control surface that an ARADR-style workflow can
+use.
+
+The package stays generic so that a project can define its own phase names,
+authority rules, agents, and implementation executor without forking the Emacs
+UI.
+
+* Core idea
+
+ARADR is treated here as a research-to-design governance loop:
+
+1. Start from a bounded problem, issue, question, or seed.
+2. Analyze what is already known and what must be researched.
+3. Persist research/evidence in durable files rather than chat-only state.
+4. Refine the analysis as evidence changes the problem model.
+5. Produce a design only when the evidence supports one.
+6. Review/adversarially challenge that design.
+7. Route shortcomings back to research/analysis/design rather than hiding them.
+8. Require explicit human authority at configured gates.
+9. Hand approved implementation work to a separate implementation system.
+
+The existing StarIntel ARDR policy describes an Analyze/Research/Design/Review
+research-to-design cycle and explicitly forbids the research worker from
+inferring implementation approval.  Related ADARD workflows extend this idea
+through analyze/design/adversarial-review/resolve/develop and a separate verify
+gate.  This package supports those mechanics without owning their policy.
+
+* What emacs-auto-research owns
+
+- Durable Org research discovery.
+- Project/control-plane roots.
+- Unified browsing/search UI.
+- Creation of research artifacts.
+- Canonical approval metadata.
+- Deterministic metadata migration.
+- Explicit approve/reject actions.
+- Approval directly from an open research document.
+
+* What it does not own
+
+- Which LLM performs a research phase.
+- Agent scheduling.
+- Prolog workflow authority.
+- RAGE or another implementation executor.
+- Whether a lifecycle transition is legal for a particular project.
+- GitHub issue policy.
+- StarIntel-specific phase names.
+
+Those belong in adapters or project policy.
+
+* Human approval
+
+The control plane makes the human gate deliberately low-friction:
+
+- from dashboard: select row, press =a=;
+- from open research: press =C-c C-a= (or =a= in optional Doom/Evil integration).
+
+The action is still strict.  Known legacy metadata is normalized first, the
+result is validated, and only then is the decision persisted.  Contradictory
+metadata fails closed.
+
+* Future adapter boundary
+
+A workflow adapter should be able to ask questions like:
+
+#+begin_src text
+What research artifacts exist for project P?
+What is the current lifecycle/approval state?
+Open artifact X.
+Record explicit human decision Y.
+Create a new research artifact seeded from Z.
+#+end_src
+
+It should not need to know how the dashboard renders or where approval keywords
+are physically located in the Org file.
