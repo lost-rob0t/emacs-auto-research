@@ -1,0 +1,45 @@
+#+title: Configuration
+
+* Projects
+
+Configure projects with =auto-research-projects=:
+
+#+begin_src emacs-lisp
+(setq auto-research-projects
+      '((:id my-project
+         :name "My Project"
+         :root "~/src/my-project"
+         :research-root "research")))
+#+end_src
+
+=:research-root= may be absolute or relative to =:root=.
+
+=M-x auto-research= always begins in all-projects scope.
+=M-x auto-research-current-project= scopes to the configured project containing
+the current =project.el= root.
+
+* Approval defaults
+
+#+begin_src emacs-lisp
+(setq auto-research-default-approval-actor "Mara"
+      auto-research-default-approval-evidence "human:emacs-auto-research")
+#+end_src
+
+These values are prompts/defaults, not credentials.
+
+* Doom and Evil
+
+No Evil setup is required for vanilla Emacs.
+
+If Evil is loaded, the package can load its optional Doom compatibility shim.
+The dashboard/document commands remain ordinary Emacs commands and keymaps;
+Doom support is additive rather than a core dependency.
+
+* gptel
+
+The initial slices intentionally contain no LLM dependency.  A later adapter
+will provide an optional gptel fallback for repair cases that deterministic
+migration cannot solve.
+
+Provider credentials, backend choice, and the user's GLM 5.3 Flash default
+belong in the user's tangled =config.org=, not in this package.
