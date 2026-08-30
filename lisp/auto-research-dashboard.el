@@ -7,6 +7,7 @@
 (require 'tabulated-list)
 (require 'auto-research-project)
 (require 'auto-research-metadata)
+(require 'auto-research-plugin)
 
 (cl-defstruct (auto-research-item (:constructor auto-research-item--create))
   project file title lifecycle approval)
@@ -90,7 +91,7 @@
                              auto-research-dashboard--items)))
     (setq tabulated-list-entries (mapcar #'auto-research-dashboard--row visible)
           header-line-format
-          (format "Auto Research — %s — %d/%d  [RET open] [a approve] [R reject] [n new] [p project] [A all] [/ search] [g refresh]"
+          (format "Auto Research — %s — %d/%d  [RET open] [a approve] [R reject] [n new] [p project] [A all] [x plugin] [/ search] [g refresh]"
                   (auto-research-dashboard--scope-label)
                   (length visible)
                   (length auto-research-dashboard--items)))
@@ -109,6 +110,19 @@
                     (string= id (auto-research-dashboard--item-id item)))
                   auto-research-dashboard--items)
         (user-error "No research item on this row"))))
+
+(defun auto-research-dashboard-context ()
+  "Return plugin context for the selected dashboard row."
+  (let ((item (auto-research-dashboard-at-point)))
+    (list :source 'dashboard
+          :item item
+          :file (auto-research-item-file item)
+          :project (auto-research-item-project item))))
+
+(defun auto-research-dashboard-run-plugin-action ()
+  "Run an integration action for the selected research item."
+  (interactive)
+  (auto-research-plugin-run-action (auto-research-dashboard-context)))
 
 (defun auto-research-dashboard-open ()
   "Open the selected research document."
@@ -150,6 +164,7 @@
     (define-key map (kbd "n") #'auto-research-new)
     (define-key map (kbd "p") #'auto-research-dashboard-select-project)
     (define-key map (kbd "A") #'auto-research-dashboard-all-projects)
+    (define-key map (kbd "x") #'auto-research-dashboard-run-plugin-action)
     (define-key map (kbd "/") #'auto-research-dashboard-search)
     (define-key map (kbd "g") #'auto-research-dashboard-refresh)
     map))
