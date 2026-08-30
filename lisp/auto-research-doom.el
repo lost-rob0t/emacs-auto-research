@@ -13,11 +13,13 @@
       (kbd "n") #'auto-research-new
       (kbd "p") #'auto-research-dashboard-select-project
       (kbd "A") #'auto-research-dashboard-all-projects
+      (kbd "x") #'auto-research-dashboard-run-plugin-action
       (kbd "/") #'auto-research-dashboard-search
       (kbd "g") #'auto-research-dashboard-refresh)
     (evil-define-key state auto-research-document-mode-map
       (kbd "a") #'auto-research-approve
-      (kbd "R") #'auto-research-reject)))
+      (kbd "R") #'auto-research-reject
+      (kbd "x") #'auto-research-run-plugin-action)))
 
 (provide 'auto-research-doom)
 ;;; auto-research-doom.el ends here
