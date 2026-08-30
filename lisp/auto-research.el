@@ -89,11 +89,32 @@
       (user-error "Current directory is not inside a configured research project"))
     (auto-research-dashboard (auto-research-project-id project))))
 
+(defun auto-research-document-project-for-file (&optional file)
+  "Return the configured project whose research root contains FILE."
+  (let* ((file (or file buffer-file-name))
+         (directory (and file (file-name-directory file)))
+         (project (and directory (auto-research-project-at-directory directory))))
+    (when (and project file
+               (file-in-directory-p
+                (file-truename file)
+                (file-truename (auto-research-project-research-root project))))
+      project)))
+
+(defun auto-research-enable-document-mode-maybe ()
+  "Enable research controls when an Org file belongs to a configured research root."
+  (when-let ((project (and buffer-file-name
+                           (auto-research-document-project-for-file buffer-file-name))))
+    (auto-research-document-mode 1)
+    (setq-local auto-research-document-project
+                (auto-research-project-id project))))
+
 ;;;###autoload
 (defun auto-research ()
   "Open the unified research control plane showing all configured projects."
   (interactive)
   (auto-research-dashboard 'all))
+
+(add-hook 'org-mode-hook #'auto-research-enable-document-mode-maybe)
 
 ;; Vanilla Emacs is the baseline.  Doom compatibility is additive and loaded
 ;; only after Evil exists, so the package never depends on Evil.
