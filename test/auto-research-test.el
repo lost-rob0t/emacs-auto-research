@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'auto-research)
+(require 'auto-research-plugin)
 
 (defconst auto-research-test--partial
   "#+title: Example\n#+status: REVIEW\n#+approval_schema: prolog-rlm.research-approval.v1\n#+approval_state: PENDING\n\n* Body\nKeep me.\n")
@@ -29,6 +30,7 @@
 (ert-deftest auto-research-project-scan-keeps-project-identity ()
   (let* ((dir-a (make-temp-file "auto-research-a" t))
          (dir-b (make-temp-file "auto-research-b" t))
+         (auto-research--plugins nil)
          (auto-research-projects
           `((:id a :root ,dir-a :research-root "research")
             (:id b :root ,dir-b :research-root "research"))))
@@ -45,6 +47,59 @@
                                 (auto-research-project-by-id "b"))))))
       (delete-directory dir-a t)
       (delete-directory dir-b t))))
+
+(ert-deftest auto-research-plugin-contributes-projects-without-core-coupling ()
+  (let* ((dir (make-temp-file "auto-research-plugin" t))
+         (auto-research-projects nil)
+         (auto-research--plugins nil))
+    (unwind-protect
+        (progn
+          (auto-research-register-plugin
+           (auto-research-plugin-create
+            :id 'example-workflow
+            :project-provider
+            (lambda ()
+              `((:id plugin-project
+                 :name "Plugin Project"
+                 :root ,dir
+                 :research-root "research")))))
+          (let ((project (auto-research-project-by-id "plugin-project")))
+            (should project)
+            (should (string= "Plugin Project" (auto-research-project-name project)))))
+      (delete-directory dir t))))
+
+(ert-deftest auto-research-plugin-observes-human-decision ()
+  (let ((auto-research--plugins nil)
+        observed)
+    (auto-research-register-plugin
+     (auto-research-plugin-create
+      :id 'observer
+      :after-decision
+      (lambda (file state project)
+        (setq observed (list file state project)))))
+    (auto-research-plugin-after-decision "/tmp/research.org" "APPROVED" nil)
+    (should (equal '(/tmp/research.org) nil))
+    (should (equal (car observed) "/tmp/research.org"))
+    (should (equal (cadr observed) "APPROVED"))
+    (should-not (caddr observed))))
+
+(ert-deftest auto-research-directly-opened-file-is-recognized ()
+  (let* ((dir (make-temp-file "auto-research-open" t))
+         (research (expand-file-name "research" dir))
+         (file (expand-file-name "item.org" research))
+         (auto-research--plugins nil)
+         (auto-research-projects
+          `((:id direct :root ,dir :research-root "research"))))
+    (unwind-protect
+        (progn
+          (make-directory research)
+          (with-temp-file file
+            (insert "#+title: Direct\n#+status: REVIEW\n"))
+          (should (string=
+                   "direct"
+                   (auto-research-project-id
+                    (auto-research-document-project-for-file file)))))
+      (delete-directory dir t))))
 
 (provide 'auto-research-test)
 ;;; auto-research-test.el ends here
