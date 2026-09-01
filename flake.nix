@@ -15,24 +15,30 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
+      lib.mkPackage =
+        {
+          pkgs,
+          epkgs ? pkgs.emacsPackages,
+        }:
+        epkgs.trivialBuild {
+          pname = "auto-research";
+          version = "0.1.0";
+          src = ./lisp;
+          packageRequires = [ epkgs.org ];
+
+          meta = {
+            description = "Generic project-scoped Emacs UI for research documents and human gates";
+            homepage = "https://github.com/lost-rob0t/emacs-auto-research";
+            license = pkgs.lib.licenses.gpl3Only;
+            platforms = pkgs.lib.platforms.all;
+          };
+        };
+
       packages = forAllSystems (
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          epkgs = pkgs.emacsPackages;
-          autoResearch = epkgs.trivialBuild {
-            pname = "auto-research";
-            version = "0.1.0";
-            src = ./lisp;
-            packageRequires = [ epkgs.org ];
-
-            meta = {
-              description = "Generic project-scoped Emacs UI for research documents and human gates";
-              homepage = "https://github.com/lost-rob0t/emacs-auto-research";
-              license = pkgs.lib.licenses.gpl3Only;
-              platforms = pkgs.lib.platforms.all;
-            };
-          };
+          autoResearch = self.lib.mkPackage { inherit pkgs; };
         in
         {
           default = autoResearch;
@@ -45,7 +51,10 @@
       });
 
       overlays.default = final: _prev: {
-        emacs-auto-research = self.packages.${final.stdenv.hostPlatform.system}.default;
+        emacs-auto-research = self.lib.mkPackage {
+          pkgs = final;
+          epkgs = final.emacsPackages;
+        };
       };
     };
 }
